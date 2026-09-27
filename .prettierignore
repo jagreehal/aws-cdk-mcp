@@ -1,0 +1,6 @@
+dist
+cdk.out
+pnpm-lock.yaml
+tools/oxlint/anti-slop
+reports
+lambda

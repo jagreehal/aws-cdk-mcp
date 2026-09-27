@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    // Type-checking runs with bundler resolution (the example is bundled); the published
+    // library stays CommonJS.
+    "module": "node16",
+    "moduleResolution": "node16",
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["**/*.test.ts"]
+}

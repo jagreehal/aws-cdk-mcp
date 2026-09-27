@@ -1,0 +1,81 @@
+{
+  "name": "aws-cdk-mcp",
+  "version": "0.0.1",
+  "description": "CDK construct for a stateless (MCP 2026-07-28) MCP server on API Gateway + Lambda",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagreehal/aws-cdk-mcp.git"
+  },
+  "homepage": "https://github.com/jagreehal/aws-cdk-mcp#readme",
+  "bugs": "https://github.com/jagreehal/aws-cdk-mcp/issues",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "lambda"
+  ],
+  "scripts": {
+    "bundle": "node tools/bundle-lambdas.mts",
+    "build": "tsc -p tsconfig.build.json && pnpm bundle",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "test:stories": "STORY_REPORT=1 vitest run",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "precheck": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "example:synth": "pnpm bundle && cdk synth --app 'node --env-file-if-exists=.env --import tsx example/app.ts'",
+    "example:deploy": "pnpm bundle && cdk deploy --app 'node --env-file-if-exists=.env --import tsx example/app.ts' --require-approval never",
+    "example:destroy": "cdk destroy --app 'node --env-file-if-exists=.env --import tsx example/app.ts' --force",
+    "prepublishOnly": "pnpm precheck && pnpm build",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
+  },
+  "peerDependencies": {
+    "aws-cdk-lib": "^2.252.0",
+    "constructs": "^10.5.0"
+  },
+  "devDependencies": {
+    "@changesets/cli": "2.31.1",
+    "@modelcontextprotocol/server": "2.1.0",
+    "@oxlint/plugins": "1.85.0",
+    "@types/aws-lambda": "8.10.163",
+    "@types/node": "26.6.3",
+    "autotel": "7.9.0",
+    "autotel-aws": "1.2.1",
+    "autotel-mcp-instrumentation": "59.0.0",
+    "aws-cdk": "2.1143.0",
+    "aws-cdk-lib": "2.271.0",
+    "cdk-nag": "3.0.2",
+    "constructs": "10.8.1",
+    "esbuild": "0.28.2",
+    "executable-stories-vitest": "8.9.8",
+    "hono": "4.13.9",
+    "oxlint": "1.85.0",
+    "prettier": "3.9.9",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.2"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "aws-cdk",
+    "cdk",
+    "construct",
+    "mcp",
+    "model-context-protocol",
+    "api-gateway",
+    "lambda"
+  ]
+}
