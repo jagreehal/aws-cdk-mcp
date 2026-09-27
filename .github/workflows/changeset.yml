@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   changeset:
-    if: github.head_ref != 'changeset-release/main'
+    # Dependabot bumps need no changeset of their own; the next release picks them up.
+    if: github.head_ref != 'changeset-release/main' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
