@@ -17,10 +17,8 @@ if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 }
 
 // Read per request: a handful of string ops, and a config change needs no cold start to apply.
-// ponytail: workaround until autotel-aws > 1.2.1 (`extractTraceContext` takes a carrier function)
-// and autotel-mcp-instrumentation > 59.0.0 (tool spans keep a host span in the caller's trace)
-// are published. Then delete the helpers below and pass
-// `{ extractTraceContext: (e) => traceCarrierOf(…body…) }` to wrapHandler.
+// Once autotel-aws > 1.2.1 and autotel-mcp-instrumentation > 59.0.0 are published, replace the
+// helpers below with `{ extractTraceContext: (e) => traceCarrierOf(…body…) }` on wrapHandler.
 
 /** A JSON-RPC request carrying W3C trace context in `params._meta`; other keys kept as-is. */
 const TracedRequest = z.looseObject({

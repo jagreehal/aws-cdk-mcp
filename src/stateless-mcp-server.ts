@@ -94,6 +94,8 @@ export type McpAuth =
        * domain. Prefer `sub` for people whose email may change: Google keeps it stable.
        */
       readonly users: Record<string, string[]>;
+      /** How long API Gateway caches a verdict per token; a removed user keeps access this long. @default 5 minutes */
+      readonly cacheTtl?: cdk.Duration;
     };
 
 export interface StatelessMcpServerProps {
@@ -179,13 +181,17 @@ export class StatelessMcpServer extends Construct {
             latencyMs: '$context.responseLatency',
             email: '$context.authorizer.email',
             clientId: '$context.authorizer.sub',
+            jwtSub: '$context.authorizer.claims.sub',
+            iamCaller: '$context.identity.userArn',
             authError: '$context.authorizer.error',
           }),
         ),
       },
     });
 
-    this.url = `${stage.url.replace(/\/$/, '')}${mcpPath}`;
+    const baseUrl = stage.url.replace(/\/$/, '');
+
+    this.url = `${baseUrl}${mcpPath}`;
 
     const resolved =
       auth.type === 'googleWorkspace'
@@ -226,7 +232,7 @@ export class StatelessMcpServer extends Construct {
         resolved.scopes ?? (resolved.type === 'jwt' ? resolved.requiredScopes : ['openid']);
 
       this.addProtectedResourceMetadata(mcpPath, issuer, scopes);
-      this.resourceMetadataUrl = `${stage.url.replace(/\/$/, '')}/.well-known/oauth-protected-resource${mcpPath}`;
+      this.resourceMetadataUrl = `${baseUrl}/.well-known/oauth-protected-resource${mcpPath}`;
     }
 
     this.serverErrorAlarm = this.api
@@ -252,17 +258,8 @@ export class StatelessMcpServer extends Construct {
   }
 
   private apiKeyAuth(auth: Extract<McpAuth, { type: 'apiKey' }>): LambdaAuth {
-    const keys = ApiKeysSchema.parse(auth.keys);
-    const serialized = JSON.stringify(keys);
-
-    if (Buffer.byteLength(serialized, 'utf8') > 3500) {
-      throw new Error(
-        'apiKey configuration exceeds the Lambda environment budget; use a custom Lambda authorizer backed by a secret store.',
-      );
-    }
-
     const authorizer = this.runtimeFunction('ApiKeyAuthorizer', 'api-key-authorizer', {
-      API_KEYS: serialized,
+      API_KEYS: JSON.stringify(ApiKeysSchema.parse(auth.keys)),
     });
 
     return {
@@ -287,10 +284,13 @@ export class StatelessMcpServer extends Construct {
       throw new Error('googleWorkspace auth needs at least one of `clientIds`.');
     }
 
+    if (!auth.hostedDomain.trim()) {
+      throw new Error('googleWorkspace auth needs a `hostedDomain`.');
+    }
+
     const authorizer = this.runtimeFunction('GoogleAuthorizer', 'google-authorizer', {
       GOOGLE_CLIENT_IDS: auth.clientIds.join(','),
       HOSTED_DOMAIN: auth.hostedDomain,
-      // ponytail: Lambda env caps at 4 KB (~80 users); move to SSM/AppConfig past that.
       USERS: JSON.stringify(users),
     });
 
@@ -299,6 +299,7 @@ export class StatelessMcpServer extends Construct {
       authorizer,
       authorizationServer: 'https://accounts.google.com',
       scopes: ['openid', 'email'],
+      cacheTtl: auth.cacheTtl,
     };
   }
 
@@ -339,6 +340,13 @@ export class StatelessMcpServer extends Construct {
     runtime: string,
     environment: Record<string, string>,
   ): lambda.Function {
+    // Lambda caps all variables together at 4 KB. JSON adds quoting, so this check errs high.
+    if (Buffer.byteLength(JSON.stringify(environment), 'utf8') > 4096) {
+      throw new Error(
+        `${id} configuration exceeds the Lambda environment budget (4 KB); use a custom Lambda authorizer backed by a secret store.`,
+      );
+    }
+
     const logGroup = new logs.LogGroup(this, `${id}Logs`, {
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,

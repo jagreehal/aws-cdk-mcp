@@ -5,24 +5,9 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { Hono } from 'hono';
 import { handle, type LambdaEvent } from 'hono/aws-lambda';
 import { z } from 'zod';
-import type { McpIdentity } from '../src';
+import { identify as identifyCaller, type GatewayAuthorizer } from '../src/runtime/identify';
 
-/** Gateway identity: `lambda` (Google, API key or custom), `jwt`, or `iam`. */
-export type GatewayAuthorizer = {
-  lambda?: Partial<McpIdentity>;
-  // `scopes` is null unless the route has authorizationScopes.
-  jwt?: { claims: Record<string, string | number | boolean | string[]>; scopes: string[] | null };
-  // API Gateway's SigV4 verdict. For a Lambda caller, `userArn` is its assumed-role session.
-  iam?: {
-    accessKey: string;
-    accountId: string;
-    callerId: string;
-    cognitoIdentity: null;
-    principalOrgId: null;
-    userArn: string;
-    userId: string;
-  };
-};
+export type { GatewayAuthorizer };
 
 /** Who a trusted service may act for, and as which scopes: `USERS`, the same map as the construct's. */
 export type ServiceCallers = {
@@ -109,38 +94,11 @@ export function identify(
 ): AuthInfo | undefined {
   if (authorizer?.iam) return identifyService(authorizer.iam.userArn, opts.service, opts.now);
 
-  const jwt = authorizer?.jwt;
-  const lambda = authorizer?.lambda;
-
-  const caller = jwt
-    ? {
-        id: String(jwt.claims.email ?? jwt.claims.sub ?? ''),
-        // API Gateway parses the scope claim when the route has authorizationScopes.
-        scopes: jwt.scopes ?? String(jwt.claims.scope ?? '').split(' '),
-        exp: Number(jwt.claims.exp),
-      }
-    : lambda
-      ? {
-          id: lambda.email ?? lambda.sub ?? '',
-          scopes: (lambda.scopes ?? '').split(' '),
-          exp: Number(lambda.exp),
-        }
-      : undefined;
-
-  if (!caller) {
-    return opts.allowAnonymous
-      ? { token: '', clientId: 'anonymous', scopes: [], expiresAt: opts.now + 60 }
-      : undefined;
+  if (!authorizer?.jwt && !authorizer?.lambda && opts.allowAnonymous) {
+    return { token: '', clientId: 'anonymous', scopes: [], expiresAt: opts.now + 60 };
   }
 
-  if (!caller.id || !Number.isFinite(caller.exp) || caller.exp <= opts.now) return undefined;
-
-  return {
-    token: '', // verified and dropped at the gateway; nothing here forwards it
-    clientId: caller.id,
-    scopes: caller.scopes.filter(Boolean),
-    expiresAt: caller.exp,
-  };
+  return identifyCaller(authorizer, opts.now);
 }
 
 /** Backstop per tool: the gateway authenticates, the tool authorizes. */

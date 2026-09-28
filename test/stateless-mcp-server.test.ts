@@ -95,6 +95,26 @@ describe('StatelessMcpServer', () => {
     });
   });
 
+  test('access logs name the caller whichever authorizer ran', ({ task }) => {
+    story.init(task);
+
+    story.given('a server with auth "none"');
+    story.then('the log format records Lambda, JWT and IAM caller fields');
+    synth({ type: 'none' }).hasResourceProperties('AWS::ApiGatewayV2::Stage', {
+      AccessLogSettings: {
+        Format: Match.serializedJson(
+          Match.objectLike({
+            email: '$context.authorizer.email',
+            clientId: '$context.authorizer.sub',
+            jwtSub: '$context.authorizer.claims.sub',
+            iamCaller: '$context.identity.userArn',
+          }),
+        ),
+        DestinationArn: Match.anyValue(),
+      },
+    });
+  });
+
   test('access logs can go to a log group the consumer owns, retained and longer-lived', ({
     task,
   }) => {
@@ -494,6 +514,69 @@ describe('StatelessMcpServer', () => {
       story.when('Google auth is given no client ids');
       story.then('synth fails naming clientIds');
       expect(() => synth({ ...google, clientIds: [] })).toThrow(/clientIds/);
+    });
+
+    test('refuses an empty hostedDomain, which would fail every cold start', ({ task }) => {
+      story.init(task);
+
+      story.when('Google auth is given an empty hostedDomain');
+      story.then('synth fails naming hostedDomain');
+      expect(() => synth({ ...google, hostedDomain: '' })).toThrow(/hostedDomain/);
+    });
+
+    test('refuses a users map too big for the Lambda environment', ({ task }) => {
+      story.init(task);
+
+      story.given('200 users, well past the 4 KB Lambda environment limit');
+
+      const users = Object.fromEntries(
+        Array.from({ length: 200 }, (_, i) => [`user${i}@example.com`, ['read']]),
+      );
+
+      story.then('synth fails, rather than the deploy');
+      expect(() => synth({ ...google, users })).toThrow(/environment budget/);
+    });
+
+    test('counts the whole authorizer environment against the 4 KB limit, not just users', ({
+      task,
+    }) => {
+      story.init(task);
+
+      story.given('110 users and 12 client ids: users fit alone, the environment does not');
+
+      const users = Object.fromEntries(
+        Array.from({ length: 110 }, (_, i) => [`user${i}@example.com`, ['read']]),
+      );
+
+      const clientIds = Array.from(
+        { length: 12 },
+        (_, i) => `${i}-abcdefghijklmnopqrstuvwxyz0123456789.apps.googleusercontent.com`,
+      );
+
+      expect(Buffer.byteLength(JSON.stringify(users))).toBeLessThan(3500);
+      expect(
+        Buffer.byteLength(
+          JSON.stringify({
+            GOOGLE_CLIENT_IDS: clientIds.join(','),
+            HOSTED_DOMAIN: 'example.com',
+            USERS: JSON.stringify(users),
+          }),
+        ),
+      ).toBeGreaterThan(4096);
+
+      story.then('synth fails');
+      expect(() => synth({ ...google, clientIds, users })).toThrow(/environment budget/);
+    });
+
+    test('caches verdicts for cacheTtl when given, so removals bite sooner', ({ task }) => {
+      story.init(task);
+
+      story.given('Google auth with cacheTtl of 30 seconds');
+      story.then('the authorizer caches for 30 seconds');
+      synth({ ...google, cacheTtl: Duration.seconds(30) }).hasResourceProperties(
+        'AWS::ApiGatewayV2::Authorizer',
+        { AuthorizerResultTtlInSeconds: 30 },
+      );
     });
 
     test('refuses an empty allowlist rather than letting the whole domain in', ({ task }) => {

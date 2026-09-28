@@ -70,3 +70,38 @@ test('the separate Autotel entry point bundles its Lambda and MCP instrumentatio
     ),
   ).toBe(true);
 });
+
+test('src/runtime/identify.ts bundles without aws-cdk-lib, so handlers can import it', async ({
+  task,
+}) => {
+  story.init(task);
+
+  story.given('the runtime entry point consumers import as aws-cdk-mcp/runtime');
+  story.when('it is bundled with esbuild');
+
+  const bundle = await build({
+    entryPoints: ['src/runtime/identify.ts'],
+    bundle: true,
+    platform: 'node',
+    write: false,
+    metafile: true,
+  });
+
+  story.then('no aws-cdk-lib or constructs module is among its inputs');
+  expect(
+    Object.keys(bundle.metafile.inputs).filter((input) => /aws-cdk-lib|constructs/.test(input)),
+  ).toEqual([]);
+});
+
+test('package.json exports aws-cdk-mcp/runtime', async ({ task }) => {
+  story.init(task);
+
+  story.given('the published package.json');
+  const pkg = (await import('../package.json', { with: { type: 'json' } })).default;
+
+  story.then('"./runtime" points at the compiled identify module');
+  expect(pkg.exports['./runtime']).toEqual({
+    types: './dist/runtime/identify.d.ts',
+    default: './dist/runtime/identify.js',
+  });
+});
