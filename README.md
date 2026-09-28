@@ -103,18 +103,20 @@ server.serverErrorAlarm.addAlarmAction(new SnsAction(opsTopic));
 
 Each line is JSON:
 
-| Field       | Source                       | Filled by                                                 |
-| ----------- | ---------------------------- | --------------------------------------------------------- |
-| `requestId` | `$context.requestId`         | the gateway                                               |
-| `ip`        | `$context.identity.sourceIp` | the gateway                                               |
-| `route`     | `$context.routeKey`          | the gateway                                               |
-| `status`    | `$context.status`            | the gateway                                               |
-| `latencyMs` | `$context.responseLatency`   | the gateway                                               |
-| `email`     | `$context.authorizer.email`  | Google, and a Lambda authorizer that sets `email`         |
-| `clientId`  | `$context.authorizer.sub`    | Google, API keys, and a Lambda authorizer that sets `sub` |
-| `authError` | `$context.authorizer.error`  | a failed authorizer                                       |
+| Field       | Source                           | Filled by                                                 |
+| ----------- | -------------------------------- | --------------------------------------------------------- |
+| `requestId` | `$context.requestId`             | the gateway                                               |
+| `ip`        | `$context.identity.sourceIp`     | the gateway                                               |
+| `route`     | `$context.routeKey`              | the gateway                                               |
+| `status`    | `$context.status`                | the gateway                                               |
+| `latencyMs` | `$context.responseLatency`       | the gateway                                               |
+| `email`     | `$context.authorizer.email`      | Google, and a Lambda authorizer that sets `email`         |
+| `clientId`  | `$context.authorizer.sub`        | Google, API keys, and a Lambda authorizer that sets `sub` |
+| `jwtSub`    | `$context.authorizer.claims.sub` | `jwt`                                                     |
+| `iamCaller` | `$context.identity.userArn`      | `iam`                                                     |
+| `authError` | `$context.authorizer.error`      | a failed authorizer                                       |
 
-JWT claims live under `$context.authorizer.jwt.claims`, and IAM identity lives under `$context.authorizer.iam`. This format does not read those paths, so `email` and `clientId` are empty for `jwt` and `iam`. The gateway cannot log request headers, so the protocol version is absent here. The example handler logs it. See [The handler you write](#the-handler-you-write).
+Each mode fills its own caller fields and leaves the others empty. The gateway cannot log request headers, so the protocol version is absent here. The example handler logs it. See [The handler you write](#the-handler-you-write).
 
 ## Auth
 
@@ -172,7 +174,7 @@ auth: {
 | `scopes`    | List of tokens with no whitespace. An empty list grants no scopes.  |
 | `expiresAt` | Optional epoch seconds. The key is refused when `expiresAt <= now`. |
 
-Synth throws when `keys` is empty, a hash is the wrong shape, two entries share a hash, a scope contains whitespace, or `JSON.stringify(keys)` is over 3,500 UTF-8 bytes. The byte cap leaves room in Lambda's 4 KB environment. Past that, use `lambda` with a secret store and `identitySource: ['$request.header.x-api-key']`.
+Synth throws when `keys` is empty, a hash is the wrong shape, two entries share a hash, a scope contains whitespace, or the authorizer's environment, serialized as JSON, is over Lambda's 4 KB limit. Past that, use `lambda` with a secret store and `identitySource: ['$request.header.x-api-key']`.
 
 Generate the key on your machine. At least 32 random bytes. Share the raw key through your secret process. Put the hash in CDK configuration.
 
@@ -282,7 +284,7 @@ auth: {
 }
 ```
 
-Synth throws when `clientIds` is empty or `users` has no entries. Keys are emails or Google `sub`s. Emails are lowercased before they are stored, so `Alice@example.com` is stored as `alice@example.com`. Google recommends `sub` because an email can change and a `sub` does not. You can mix both. A `sub` match wins.
+Synth throws when `clientIds` is empty, `hostedDomain` is blank, `users` has no entries, or `users` is too big for the Lambda environment (see below). `cacheTtl` sets how long API Gateway caches a verdict per token (default 5 minutes). Keys are emails or Google `sub`s. Emails are lowercased before they are stored, so `Alice@example.com` is stored as `alice@example.com`. Google recommends `sub` because an email can change and a `sub` does not. You can mix both. A `sub` match wins.
 
 The authorizer is a Lambda the construct creates. It reads `Authorization`, expects `Bearer <opaque access token>` (case-insensitive scheme, one non-whitespace token), and asks Google in parallel:
 
@@ -307,7 +309,7 @@ It then returns:
 
 `email` is lowercased. A tokeninfo or userinfo body that fails the schema is a refusal, as is any non-OK HTTP status (expired and revoked tokens come back 400 or 401). If Google is unreachable, or the environment fails to parse, the handler catches the error, logs `[authorizer]` plus the error, and returns `isAuthorized: false`. The tokeninfo URL contains the access token. A network error logged by `fetch` can include that URL.
 
-The authorizer environment is `GOOGLE_CLIENT_IDS` (comma-separated), `HOSTED_DOMAIN`, and `USERS` (JSON). Lambda caps all environment variables at 4 KB. A `users` map of about 80 people fits. Past that, move the allowlist to SSM or AppConfig and use `auth.type: 'lambda'`. Anyone who can call `lambda:GetFunctionConfiguration` or `cloudformation:GetTemplate` on the stack can read the emails. Removing a person takes a redeploy, and their cached verdict lasts up to 5 minutes. A token that expires sooner is refused by the handler's `exp` check.
+The authorizer environment is `GOOGLE_CLIENT_IDS` (comma-separated), `HOSTED_DOMAIN`, and `USERS` (JSON). Lambda caps all environment variables at 4 KB, counted across all three together, so synth throws when the environment serialized as JSON passes 4,096 bytes (about 100 people with a couple of client ids). Past that, move the allowlist to SSM or AppConfig and use `auth.type: 'lambda'`. Anyone who can call `lambda:GetFunctionConfiguration` or `cloudformation:GetTemplate` on the stack can read the emails. Removing a person takes a redeploy, and their cached verdict lasts up to `cacheTtl`. A token that expires sooner is refused by the handler's `exp` check.
 
 Metadata points at `https://accounts.google.com` with scopes `openid` and `email`.
 
@@ -367,11 +369,21 @@ A Google authorizer must finish both Google calls inside 5 seconds.
 
 The gateway authenticates. Your Lambda authorizes tools, checks expiry, and speaks MCP. `example/mcp.ts` is the reference in this repo. It is not part of the published construct. Each rule below has a test that fails if you remove the rule.
 
-The example reads three authorizer shapes. A handler that reads `lambda` context and ignores `jwt` lets a JWT caller skip the scope checks.
+The published `aws-cdk-mcp/runtime` entry point covers the common case. It imports no aws-cdk-lib, so it is safe in a handler bundle:
+
+```ts
+import { identify } from 'aws-cdk-mcp/runtime';
+
+const authInfo = identify(event.requestContext.authorizer, Math.floor(Date.now() / 1000));
+```
+
+It reads `jwt` and `lambda` identities, re-checks `exp`, and returns the SDK's `AuthInfo` shape or `undefined`. It refuses IAM and anonymous callers: those are policy decisions the handler makes itself, as the example does below.
+
+It reads three authorizer shapes, exported as `GatewayAuthorizer`. A handler that reads `lambda` context and ignores `jwt` lets a JWT caller skip the scope checks.
 
 ```ts
 type GatewayAuthorizer = {
-  lambda?: Partial<McpIdentity>;
+  lambda?: Partial<Omit<McpIdentity, 'exp'>> & { exp?: number | string };
   jwt?: { claims: Record<string, string | number | boolean | string[]>; scopes: string[] | null };
   iam?: {
     accessKey: string;
@@ -385,7 +397,7 @@ type GatewayAuthorizer = {
 };
 ```
 
-`identify` in the example:
+`identify` in the example handles IAM and anonymous callers, then hands the rest to the runtime `identify`:
 
 1. If `authorizer.iam` is set, delegation rules apply. See [Service callers in the example](#service-callers-in-the-example).
 2. Else if `authorizer.jwt` is set, the caller id is `claims.email`, then `claims.sub`. Scopes are `jwt.scopes`, or `claims.scope` split on spaces. `exp` is `claims.exp`.
