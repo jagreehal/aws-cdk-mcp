@@ -92,6 +92,7 @@ export type McpAuth =
       /**
        * email or Google `sub` → scopes. A caller matching neither is refused, even inside the
        * domain. Prefer `sub` for people whose email may change: Google keeps it stable.
+       * A `*` key gives everyone in `hostedDomain` its scopes; a named entry wins over it.
        */
       readonly users: Record<string, string[]>;
       /** How long API Gateway caches a verdict per token; a removed user keeps access this long. @default 5 minutes */

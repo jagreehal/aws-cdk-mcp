@@ -564,6 +564,18 @@ describe('service callers (auth: iam)', () => {
     story.then('it is refused with 403');
     expect((await invoke(asBot('SlackBot', 'carol@example.com'))).status).toBe(403);
   });
+
+  test('a trusted role cannot act for "*", the Google everyone entry', async ({ task }) => {
+    story.init(task, { tags: ['iam'] });
+
+    story.given('SlackBot is trusted and USERS has a "*" entry');
+    vi.stubEnv('TRUSTED_CALLER_ROLES', BOT_ROLE);
+    vi.stubEnv('USERS', JSON.stringify({ '*': ['echo'] }));
+
+    story.when('SlackBot calls on behalf of "*"');
+    story.then('it is refused with 403');
+    expect((await invoke(asBot('SlackBot', '*'))).status).toBe(403);
+  });
 });
 
 describe('signedHeaders', () => {
