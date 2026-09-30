@@ -104,6 +104,18 @@ export interface StatelessMcpServerProps {
   readonly auth: McpAuth;
   /** @default '/mcp' */
   readonly path?: string;
+  /**
+   * The full HTTPS MCP endpoint clients use, including any API mapping prefix.
+   * Use a concrete URL, not a CloudFormation token. Configure the domain mapping separately.
+   * @default the execute-api stage URL plus path
+   */
+  readonly publicUrl?: string;
+  /**
+   * Publish OAuth discovery on this API, mapped at the custom domain's root (no mapping key).
+   * Required when publicUrl includes a mapping prefix. Discovery routes bypass its default authorizer.
+   * @default metadata routes on the MCP API
+   */
+  readonly metadataApi?: apigwv2.HttpApi;
   /** Stage-wide throttle. @default 50 rps, burst 100 */
   readonly throttle?: apigwv2.ThrottleSettings;
   /**
@@ -116,6 +128,13 @@ export interface StatelessMcpServerProps {
 
 type LambdaAuth = Extract<McpAuth, { type: 'lambda' }>;
 
+type MetadataEnvironment = {
+  MCP_PATH: string;
+  AUTHORIZATION_SERVER: string;
+  SCOPES: string;
+  PUBLIC_RESOURCE_URL?: string;
+};
+
 /**
  * A remote MCP server on the 2026-07-28 protocol: HTTP API → Lambda, nothing else.
  *
@@ -126,7 +145,9 @@ type LambdaAuth = Extract<McpAuth, { type: 'lambda' }>;
  */
 export class StatelessMcpServer extends Construct {
   public readonly api: apigwv2.HttpApi;
-  /** The MCP endpoint, e.g. `https://abc.execute-api.eu-west-1.amazonaws.com/mcp`. */
+  /** The auto-deploying $default stage; pass it to ApiMapping when attaching a custom domain. */
+  public readonly stage: apigwv2.HttpStage;
+  /** The publicUrl when configured, otherwise the execute-api MCP endpoint. */
   public readonly url: string;
   /**
    * The RFC 9728 metadata URL, when this server publishes one. Hand it to your handler so its own
@@ -165,7 +186,7 @@ export class StatelessMcpServer extends Construct {
     });
 
     // Not 'Default': CDK drops that id from logical ids, so it would collide with the Api's.
-    const stage = this.api.addStage('Stage', {
+    this.stage = this.api.addStage('Stage', {
       stageName: '$default',
       autoDeploy: true,
       throttle,
@@ -189,9 +210,16 @@ export class StatelessMcpServer extends Construct {
       },
     });
 
-    const baseUrl = stage.url.replace(/\/$/, '');
+    const baseUrl = this.stage.url.replace(/\/$/, '');
 
-    this.url = `${baseUrl}${mcpPath}`;
+    const publicEndpoint =
+      props.publicUrl === undefined ? undefined : publicEndpointUrl(props.publicUrl);
+
+    if (props.metadataApi && !publicEndpoint) {
+      throw new Error('metadataApi needs publicUrl to identify the resource it advertises.');
+    }
+
+    this.url = publicEndpoint?.href ?? `${baseUrl}${mcpPath}`;
 
     const resolved =
       auth.type === 'googleWorkspace'
@@ -228,11 +256,27 @@ export class StatelessMcpServer extends Construct {
 
     // OAuth modes only: IAM callers sign requests, there is nothing to discover.
     if (issuer && (resolved.type === 'jwt' || resolved.type === 'lambda')) {
+      if (publicEndpoint && publicEndpoint.pathname !== mcpPath && !props.metadataApi) {
+        throw new Error(
+          'publicUrl has a mapping prefix; supply metadataApi mapped at the domain root for OAuth discovery.',
+        );
+      }
+
       const scopes =
         resolved.scopes ?? (resolved.type === 'jwt' ? resolved.requiredScopes : ['openid']);
 
-      this.addProtectedResourceMetadata(mcpPath, issuer, scopes);
-      this.resourceMetadataUrl = `${baseUrl}/.well-known/oauth-protected-resource${mcpPath}`;
+      const metadataPath = publicEndpoint?.pathname ?? mcpPath;
+
+      this.addProtectedResourceMetadata(
+        metadataPath,
+        issuer,
+        scopes,
+        props.metadataApi ?? this.api,
+        publicEndpoint?.href,
+      );
+      this.resourceMetadataUrl = `${publicEndpoint?.origin ?? baseUrl}/.well-known/oauth-protected-resource${metadataPath}`;
+    } else if (props.metadataApi) {
+      throw new Error('metadataApi needs an OAuth auth mode that publishes discovery metadata.');
     }
 
     this.serverErrorAlarm = this.api
@@ -308,12 +352,22 @@ export class StatelessMcpServer extends Construct {
    * cannot add `WWW-Authenticate` to their own 401, so clients take the spec's fallback: the
    * well-known URL, path-suffixed first, then the root.
    */
-  private addProtectedResourceMetadata(mcpPath: string, issuer: string, scopes: string[]): void {
-    const fn = this.runtimeFunction('ProtectedResourceMetadata', 'protected-resource', {
+  private addProtectedResourceMetadata(
+    mcpPath: string,
+    issuer: string,
+    scopes: string[],
+    api: apigwv2.HttpApi,
+    publicUrl: string | undefined,
+  ): void {
+    const environment: MetadataEnvironment = {
       MCP_PATH: mcpPath,
       AUTHORIZATION_SERVER: issuer,
       SCOPES: scopes.join(' '),
-    });
+    };
+
+    if (publicUrl) environment.PUBLIC_RESOURCE_URL = publicUrl;
+
+    const fn = this.runtimeFunction('ProtectedResourceMetadata', 'protected-resource', environment);
 
     const integration = new HttpLambdaIntegration('ProtectedResourceMetadata', fn);
 
@@ -321,10 +375,12 @@ export class StatelessMcpServer extends Construct {
       `/.well-known/oauth-protected-resource${mcpPath}`,
       '/.well-known/oauth-protected-resource',
     ]) {
-      for (const route of this.api.addRoutes({
+      for (const route of api.addRoutes({
         path,
         methods: [apigwv2.HttpMethod.GET],
         integration,
+        authorizer: new apigwv2.HttpNoneAuthorizer(),
+        authorizationScopes: [],
       })) {
         acknowledgePublic(route, 'RFC 9728: clients read this before they have a token.');
       }
@@ -386,6 +442,25 @@ export class StatelessMcpServer extends Construct {
 
     return fn;
   }
+}
+
+/** Public OAuth resource identifiers must be fixed HTTPS URLs without credentials or query data. */
+function publicEndpointUrl(value: string): URL {
+  if (cdk.Token.isUnresolved(value)) {
+    throw new Error('publicUrl must be a concrete HTTPS URL, not a CloudFormation token.');
+  }
+
+  const url = new URL(value);
+
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+    throw new Error('publicUrl must be an HTTPS URL without credentials, a query or a fragment.');
+  }
+
+  if (url.pathname.endsWith('/')) {
+    throw new Error('publicUrl must include the MCP path without a trailing slash.');
+  }
+
+  return url;
 }
 
 /** A route that is public on purpose, said once here so every consumer's cdk-nag run agrees. */

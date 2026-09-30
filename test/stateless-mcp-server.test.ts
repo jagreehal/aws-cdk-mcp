@@ -2,6 +2,9 @@ import { story } from 'executable-stories-vitest';
 import { describe, expect, test } from 'vitest';
 import { App, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -196,6 +199,193 @@ describe('StatelessMcpServer', () => {
 
     story.then('no route serves oauth-protected-resource metadata');
     expect(JSON.stringify(routes)).not.toContain('oauth-protected-resource');
+  });
+
+  test('publishes mapped-resource discovery on the domain root API, without its default auth', ({
+    task,
+  }) => {
+    story.init(task);
+
+    story.given('an MCP endpoint at /docs/mcp and a root API with default JWT auth');
+    const stack = new Stack(new App(), 'Mapped');
+
+    const metadataApi = new apigwv2.HttpApi(stack, 'RootApi', {
+      defaultAuthorizer: new HttpJwtAuthorizer('RootAuth', 'https://auth.example.com', {
+        jwtAudience: ['root'],
+      }),
+      defaultAuthorizationScopes: ['root:read'],
+    });
+
+    const server = new StatelessMcpServer(stack, 'Mcp', {
+      handler: fn(stack, 'Handler'),
+      auth: google,
+      publicUrl: 'https://docs.example.com/docs/mcp',
+      metadataApi,
+    });
+
+    const domain = new apigwv2.DomainName(stack, 'DocsDomain', {
+      domainName: 'docs.example.com',
+      certificate: acm.Certificate.fromCertificateArn(
+        stack,
+        'Certificate',
+        'arn:aws:acm:eu-west-1:123456789012:certificate/test',
+      ),
+    });
+
+    new apigwv2.ApiMapping(stack, 'RootMapping', { api: metadataApi, domainName: domain });
+    new apigwv2.ApiMapping(stack, 'DocsMapping', {
+      api: server.api,
+      stage: server.stage,
+      domainName: domain,
+      apiMappingKey: 'docs',
+    });
+    const template = Template.fromStack(stack);
+
+    story.then('the endpoint and metadata URLs use the full public path');
+    expect(server.url).toBe('https://docs.example.com/docs/mcp');
+    expect(server.resourceMetadataUrl).toBe(
+      'https://docs.example.com/.well-known/oauth-protected-resource/docs/mcp',
+    );
+
+    story.and('the domain maps discovery at the root and the MCP stage under docs');
+    template.hasResourceProperties('AWS::ApiGatewayV2::ApiMapping', {
+      ApiId: stack.resolve(metadataApi.apiId),
+      ApiMappingKey: Match.absent(),
+      Stage: '$default',
+    });
+    template.hasResourceProperties('AWS::ApiGatewayV2::ApiMapping', {
+      ApiId: stack.resolve(server.api.apiId),
+      ApiMappingKey: 'docs',
+      Stage: '$default',
+    });
+
+    story.and('both discovery routes are public on the root API');
+
+    for (const path of ['/docs/mcp', '']) {
+      template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+        ApiId: stack.resolve(metadataApi.apiId),
+        RouteKey: `GET /.well-known/oauth-protected-resource${path}`,
+        AuthorizationType: 'NONE',
+        AuthorizerId: Match.absent(),
+        AuthorizationScopes: Match.absent(),
+      });
+    }
+
+    story.and('MCP calls still use the authenticated route on the MCP API');
+    template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+      ApiId: stack.resolve(server.api.apiId),
+      RouteKey: 'POST /mcp',
+      AuthorizationType: 'CUSTOM',
+    });
+
+    story.and('metadata advertises the public resource instead of the gateway path');
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      Environment: {
+        Variables: Match.objectLike({ PUBLIC_RESOURCE_URL: server.url }),
+      },
+    });
+  });
+
+  test('uses a root-mapped public domain without requiring a separate metadata API', ({ task }) => {
+    story.init(task);
+
+    story.given('a public URL whose path is the MCP route');
+    const stack = new Stack(new App(), 'Domain');
+
+    const server = new StatelessMcpServer(stack, 'Mcp', {
+      handler: fn(stack, 'Handler'),
+      auth: google,
+      publicUrl: 'https://docs.example.com/mcp',
+    });
+
+    story.then('metadata stays on the MCP API and advertises the public domain');
+    expect(server.resourceMetadataUrl).toBe(
+      'https://docs.example.com/.well-known/oauth-protected-resource/mcp',
+    );
+    Template.fromStack(stack).hasResourceProperties('AWS::ApiGatewayV2::Route', {
+      ApiId: stack.resolve(server.api.apiId),
+      RouteKey: 'GET /.well-known/oauth-protected-resource/mcp',
+      AuthorizationType: 'NONE',
+    });
+  });
+
+  test('rejects an OAuth mapping prefix without a root metadata API', ({ task }) => {
+    story.init(task);
+
+    story.given('an OAuth endpoint under /docs, with no root API for discovery');
+    const stack = new Stack(new App(), 'MissingDiscovery');
+
+    story.then('construction fails instead of deploying unreachable discovery');
+    expect(
+      () =>
+        new StatelessMcpServer(stack, 'Mcp', {
+          handler: fn(stack, 'Handler'),
+          auth: google,
+          publicUrl: 'https://docs.example.com/docs/mcp',
+        }),
+    ).toThrow(/metadataApi mapped at the domain root/);
+  });
+
+  test('rejects public resource URLs carrying credentials, queries or fragments', ({ task }) => {
+    story.init(task);
+
+    story.given('a URL that cannot be an HTTPS OAuth resource identifier');
+
+    for (const publicUrl of [
+      'http://docs.example.com/mcp',
+      'https://user:secret@docs.example.com/mcp',
+      'https://docs.example.com/mcp?token=secret',
+      'https://docs.example.com/mcp#section',
+    ]) {
+      const stack = new Stack(new App(), 'InvalidUrl');
+
+      story.then('construction refuses the URL without repeating its secrets');
+      expect(
+        () =>
+          new StatelessMcpServer(stack, 'Mcp', {
+            handler: fn(stack, 'Handler'),
+            auth: google,
+            publicUrl,
+          }),
+      ).toThrow(/publicUrl must be an HTTPS URL/);
+    }
+  });
+
+  test('rejects a public URL without an MCP path or with a trailing slash', ({ task }) => {
+    story.init(task);
+
+    for (const publicUrl of ['https://docs.example.com', 'https://docs.example.com/mcp/']) {
+      story.given(`publicUrl ${publicUrl}`);
+      const stack = new Stack(new App(), 'TrailingSlash');
+
+      story.then('construction names the path as the problem');
+      expect(
+        () =>
+          new StatelessMcpServer(stack, 'Mcp', {
+            handler: fn(stack, 'Handler'),
+            auth: google,
+            publicUrl,
+          }),
+      ).toThrow(/without a trailing slash/);
+    }
+  });
+
+  test('rejects metadataApi when the auth mode publishes no discovery metadata', ({ task }) => {
+    story.init(task);
+
+    story.given('IAM auth with a root metadata API');
+    const stack = new Stack(new App(), 'IamMetadata');
+
+    story.then('construction fails instead of ignoring the API');
+    expect(
+      () =>
+        new StatelessMcpServer(stack, 'Mcp', {
+          handler: fn(stack, 'Handler'),
+          auth: { type: 'iam' },
+          publicUrl: 'https://docs.example.com/docs/mcp',
+          metadataApi: new apigwv2.HttpApi(stack, 'RootApi'),
+        }),
+    ).toThrow(/metadataApi needs an OAuth auth mode/);
   });
 
   test('apiKey protects every route using x-api-key, with no cache or OAuth metadata', ({
