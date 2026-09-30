@@ -63,13 +63,15 @@ There is one CloudWatch alarm and one stack output. See [Values on the construct
 
 ## Props
 
-| Prop         | Default                              |                                                                          |
-| ------------ | ------------------------------------ | ------------------------------------------------------------------------ |
-| `handler`    | required                             | Your MCP Lambda. Return JSON. API Gateway buffers the body.              |
-| `auth`       | required                             | You pick a mode. Omitting it fails the build.                            |
-| `path`       | `/mcp`                               | Leading slash included. Metadata uses this path as a suffix.             |
-| `throttle`   | `{ rateLimit: 50, burstLimit: 100 }` | `ThrottleSettings` on the stage, in requests per second.                 |
-| `accessLogs` | one month, deleted with the stack    | Pass your own `ILogGroup` for production. See [Production](#production). |
+| Prop          | Default                              |                                                                                                  |
+| ------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `handler`     | required                             | Your MCP Lambda. Return JSON. API Gateway buffers the body.                                      |
+| `auth`        | required                             | You pick a mode. Omitting it fails the build.                                                    |
+| `path`        | `/mcp`                               | Leading slash included. Metadata uses this path as a suffix.                                     |
+| `publicUrl`   | execute-api endpoint                 | Full HTTPS endpoint clients use, including a mapping prefix. No trailing slash.                  |
+| `metadataApi` | MCP API                              | API mapped at the public domain root for OAuth discovery. Required with an OAuth mapping prefix. |
+| `throttle`    | `{ rateLimit: 50, burstLimit: 100 }` | `ThrottleSettings` on the stage, in requests per second.                                         |
+| `accessLogs`  | one month, deleted with the stack    | Pass your own `ILogGroup` for production. See [Production](#production).                         |
 
 `path` is concatenated onto the stage URL and registered as the route path. Your handler's route must be the same path. The example Hono app listens on `/mcp` and the example stack leaves `path` at the default.
 
@@ -83,15 +85,55 @@ There is one CloudWatch alarm and one stack output. See [Values on the construct
 | `serverErrorAlarm`     | Alarm with no action until you add one.                                                                               |
 | `grantInvoke(grantee)` | `execute-api:Invoke` on the `POST`, `GET`, and `DELETE` routes. Requires IAM auth. Other modes throw.                 |
 
+`stage` exposes the auto-deploying `$default` stage. Pass `server.stage` to `ApiMapping` when attaching a custom domain.
+
 Deploy prints `url` as a stack output with id `Url` (the construct path plus `Url`, so construct `Mcp` shows up as `McpUrl`).
 
-`resourceMetadataUrl` is built from the execute-api stage URL:
+Without `publicUrl`, `resourceMetadataUrl` is built from the execute-api stage URL:
 
 ```
 ${stageUrl}/.well-known/oauth-protected-resource${path}
 ```
 
-The metadata Lambda sets `resource` from the request's `domainName`. A client that calls a custom domain you attached to `server.api` sees that host in the JSON. The `resourceMetadataUrl` property stays on the execute-api host. Pass the URL you want clients to see into your handler. The example copies `server.resourceMetadataUrl` when it is set.
+Without `publicUrl`, the metadata Lambda sets `resource` from the request's `domainName` and the MCP route. With `publicUrl`, `url` and the metadata's `resource` use that exact endpoint, and `resourceMetadataUrl` uses its origin and full path. Pass `server.resourceMetadataUrl` to your handler for its bearer challenge. The example does this when metadata is available.
+
+### Custom domains with path mappings
+
+For a domain mapped at its root, set `publicUrl: 'https://docs.example.com/mcp'` and create an `ApiMapping` with `api: server.api` and `stage: server.stage`. The discovery routes stay on that API.
+
+For an endpoint under a mapping prefix, such as `https://docs.example.com/docs/mcp`, clients discover OAuth at `https://docs.example.com/.well-known/oauth-protected-resource/docs/mcp`. An API mapped only at `/docs` cannot receive that request. Supply a separate `metadataApi` mapped at the domain root, alongside the `/docs` MCP mapping:
+
+```ts
+import { ApiMapping, DomainName, HttpApi } from 'aws-cdk-lib/aws-apigatewayv2';
+
+// certificate is an ACM certificate for docs.example.com in the API's region.
+const domain = new DomainName(this, 'DocsDomain', {
+  domainName: 'docs.example.com',
+  certificate,
+});
+const metadataApi = new HttpApi(this, 'DocsDiscovery');
+const server = new StatelessMcpServer(this, 'Mcp', {
+  handler,
+  auth: {
+    type: 'jwt',
+    issuer: 'https://auth.example.com',
+    audience: ['https://docs.example.com/docs/mcp'],
+    requiredScopes: ['mcp'],
+  },
+  publicUrl: 'https://docs.example.com/docs/mcp',
+  metadataApi,
+});
+
+new ApiMapping(this, 'DiscoveryMapping', { api: metadataApi, domainName: domain });
+new ApiMapping(this, 'DocsMapping', {
+  api: server.api,
+  stage: server.stage,
+  domainName: domain,
+  apiMappingKey: 'docs',
+});
+```
+
+You own the domain mappings and the DNS record that points at API Gateway. API Gateway strips `/docs` and sends `/mcp` to your handler, so use the full `publicUrl` as the token audience. The construct adds two unauthenticated discovery routes to the root API, including the `/docs/mcp` suffix, even when that API has a default authorizer. An existing root-mapped API works if it has no discovery routes of its own. The root metadata route describes one resource, so give each server that needs it its own domain.
 
 `serverErrorAlarm` uses `api.metricServerError()` with period 5 minutes, statistic `Sum`, threshold 5, one evaluation period, `GREATER_THAN_OR_EQUAL_TO_THRESHOLD`, and `treatMissingData: NOT_BREACHING`. The description is `${url} returned 5xx`. It counts handler errors, timeouts, and authorizers that throttle or crash. Authorizer refusals are 401 or 403 and do not trip it. A Google outage that locks callers out shows up as a rise in 4xx. Alarm on `server.api.metricClientError()` if you want that signal too.
 
@@ -319,7 +361,7 @@ Google setup for the example is in [Google Cloud](#google-cloud).
 
 ## Protected-resource metadata
 
-Published for `jwt`, for `googleWorkspace`, and for `lambda` when `authorizationServer` is set. Two unauthenticated `GET` routes, because clients try the path-suffixed URL first and then the root (RFC 9728):
+Published for `jwt`, for `googleWorkspace`, and for `lambda` when `authorizationServer` is set. Two unauthenticated `GET` routes on `metadataApi` when supplied, otherwise on `api`, because clients try the path-suffixed URL first and then the root (RFC 9728). The suffix is `publicUrl`'s full pathname when configured, otherwise `path`:
 
 - `/.well-known/oauth-protected-resource${path}`
 - `/.well-known/oauth-protected-resource`
@@ -337,7 +379,7 @@ The Lambda answers 200, `content-type: application/json`, `cache-control: max-ag
 }
 ```
 
-`resource` uses `event.requestContext.domainName` plus `MCP_PATH`, so it follows a custom domain on the request. `authorization_servers` is the JWT `issuer`, the Lambda `authorizationServer`, or `https://accounts.google.com`. `scopes_supported` is the `scopes` list you configured, split on spaces.
+`resource` uses `PUBLIC_RESOURCE_URL` when `publicUrl` is configured. Otherwise it uses `event.requestContext.domainName` plus `MCP_PATH`. `authorization_servers` is the JWT `issuer`, the Lambda `authorizationServer`, or `https://accounts.google.com`. `scopes_supported` is the `scopes` list you configured, split on spaces.
 
 HTTP APIs cannot add headers to the 401 they emit when an authorizer refuses a call. Clients fall back to these well-known URLs. Your handler's own 401 can still send `WWW-Authenticate`. The example does. See [The handler you write](#the-handler-you-write).
 
