@@ -1,6 +1,6 @@
 {
   "name": "aws-cdk-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CDK construct for a stateless (MCP 2026-07-28) MCP server on API Gateway + Lambda",
   "license": "MIT",
   "repository": {

@@ -1,5 +1,11 @@
 # aws-cdk-mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- 4458814: Add `publicUrl` and `metadataApi` for OAuth discovery on custom domains, including API mapping prefixes. Expose `stage` for attaching API mappings.
+
 ## 0.2.0
 
 ### Minor Changes
