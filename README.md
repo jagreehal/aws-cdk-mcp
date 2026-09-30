@@ -326,7 +326,7 @@ auth: {
 }
 ```
 
-Synth throws when `clientIds` is empty, `hostedDomain` is blank, `users` has no entries, or `users` is too big for the Lambda environment (see below). `cacheTtl` sets how long API Gateway caches a verdict per token (default 5 minutes). Keys are emails or Google `sub`s. Emails are lowercased before they are stored, so `Alice@example.com` is stored as `alice@example.com`. Google recommends `sub` because an email can change and a `sub` does not. You can mix both. A `sub` match wins.
+Synth throws when `clientIds` is empty, `hostedDomain` is blank, `users` has no entries, or `users` is too big for the Lambda environment (see below). `cacheTtl` sets how long API Gateway caches a verdict per token (default 5 minutes). Keys are emails or Google `sub`s. Emails are lowercased before they are stored, so `Alice@example.com` is stored as `alice@example.com`. Google recommends `sub` because an email can change and a `sub` does not. You can mix both. A `sub` match wins. A `*` key admits everyone in `hostedDomain` with its scopes, and a named entry wins over it: `{"*":["payments:read"],"cfo@example.com":["payments:read","payments:write"]}`. The `iam` example's `mcp-on-behalf-of` does not honour `*`: the bot could name any address.
 
 The authorizer is a Lambda the construct creates. It reads `Authorization`, expects `Bearer <opaque access token>` (case-insensitive scheme, one non-whitespace token), and asks Google in parallel:
 
@@ -341,7 +341,7 @@ The authorizer refuses the token unless all of these hold:
 - `exp` parses as a finite number and is greater than now
 - `hd` equals `hostedDomain` (Google's guidance: the email suffix is not proof of a Workspace account)
 - `email_verified` is `true`, and both `email` and `sub` are present
-- `sub`, or the lowercased email, is a key in `users`
+- `sub`, or the lowercased email, is a key in `users`, or `users` has a `*` key
 
 It then returns:
 
@@ -506,7 +506,7 @@ A SigV4 caller becomes that user when all of these hold:
 
 - `roleArnOf(userArn)` is one of `roleArnOf` on `TRUSTED_CALLER_ROLES`. An assumed-role session `arn:aws:sts::123456789012:assumed-role/Bot/session` and a pathed role `arn:aws:iam::123456789012:role/some/path/Bot` both become `arn:aws:iam::123456789012:role/Bot`. Account and role name identify the role. The path and the session name are dropped. A user ARN does not match. A different account does not match. The partition (`aws`, `aws-cn`, `aws-us-gov`) is kept.
 - `mcp-on-behalf-of` is in the signature's signed-header list. The example reads `SignedHeaders` from the `Authorization` header, or `X-Amz-SignedHeaders` on a presigned URL, splits on `;`, and lowercases the names. SigV4 covers the headers the signer listed. Someone who captured the request can replace an unsigned `mcp-on-behalf-of` and the signature still matches. A missing signature, or a `Bearer` authorization header, means the example treats no header as signed.
-- The header value, trimmed and lowercased, is a key in `USERS`.
+- The header value, trimmed and lowercased, is a key in `USERS` other than `*`.
 
 The SDK identity is then `{ token: '', clientId: email, scopes, expiresAt: now + 60 }`. Tool checks use those scopes. A trusted bot acting for `alice@example.com` gets Alice's scopes. Failure is the 403 `forbidden_caller` above.
 
@@ -630,7 +630,7 @@ pnpm example:destroy
 | `MCP_TRACING`                 | optional           | `none` (default) or `autotel`.                                                                     |
 | `GOOGLE_CLIENT_IDS`           | `google`           | Comma-separated OAuth client ids. At least one.                                                    |
 | `HOSTED_DOMAIN`               | `google`           | Workspace domain, compared to Google's `hd`.                                                       |
-| `MCP_USERS`                   | `google` and `iam` | JSON object, email to scope list. `{"you@example.com":["echo"]}`.                                  |
+| `MCP_USERS`                   | `google` and `iam` | JSON object, email or `*` to scope list. `{"you@example.com":["echo"]}`.                           |
 | `IAM_CALLER_ROLE_ARN`         | `iam`              | Role ARN, must start with `arn:`. Granted `execute-api:Invoke`, and set as `TRUSTED_CALLER_ROLES`. |
 | `MCP_API_KEYS`                | `apiKey`           | JSON array of `{ sha256, clientId, scopes, expiresAt? }`. The raw key stays out.                   |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `autotel`          | Exporter URL. Empty skips `init()`.                                                                |

@@ -67,7 +67,8 @@ function identifyService(
   const email = service.onBehalfOf?.trim().toLowerCase();
   const scopes = email ? service.users[email] : undefined;
 
-  if (!email || !scopes) return undefined;
+  // `*` is the Google authorizer's everyone-in-the-domain entry, not a user a bot may act for.
+  if (!email || email === '*' || !scopes) return undefined;
 
   // SigV4 is checked per request, so there's no token lifetime to carry; one minute is nominal.
   return { token: '', clientId: email, scopes, expiresAt: now + 60 };

@@ -70,7 +70,9 @@ export function decide(
   if (userInfo.email_verified !== true || !userInfo.email || !userInfo.sub) return undefined;
 
   // Keys are Google `sub`s or emails. A `sub` survives an email rename; an email is easier to read.
-  const scopes = config.users[userInfo.sub] ?? config.users[userInfo.email.toLowerCase()];
+  // `*` is everyone in `hostedDomain` (checked above); a named entry wins over it.
+  const scopes =
+    config.users[userInfo.sub] ?? config.users[userInfo.email.toLowerCase()] ?? config.users['*'];
 
   if (!scopes) return undefined;
 

@@ -125,6 +125,29 @@ describe('decide', () => {
     expect(decide({ tokenInfo: ours, userInfo: carol, now }, config)).toBeUndefined();
   });
 
+  test('"*" admits everyone in the Workspace, and a named entry wins over it', ({ task }) => {
+    story.init(task);
+
+    story.given('an allowlist with "*" for everyone and more for Bob');
+    const everyone = { ...config, users: { '*': ['read'], 'bob@example.com': ['read', 'refund'] } };
+
+    story.then('Carol, not named, gets the "*" scopes');
+    const carol = { ...alice, sub: '1003', email: 'carol@example.com' };
+    expect(decide({ tokenInfo: ours, userInfo: carol, now }, everyone)?.scopes).toBe('read');
+
+    story.then('Bob gets his own');
+    const bob = { ...alice, sub: '1002', email: 'bob@example.com' };
+    expect(decide({ tokenInfo: ours, userInfo: bob, now }, everyone)?.scopes).toBe('read refund');
+
+    story.then('a named entry with no scopes stays at no scopes');
+    const locked = { ...everyone, users: { ...everyone.users, 'carol@example.com': [] } };
+    expect(decide({ tokenInfo: ours, userInfo: carol, now }, locked)?.scopes).toBe('');
+
+    story.then('someone outside the Workspace is still refused');
+    const outsider = { ...carol, hd: undefined };
+    expect(decide({ tokenInfo: ours, userInfo: outsider, now }, everyone)).toBeUndefined();
+  });
+
   test('users can be keyed by Google sub, so an email rename keeps access', ({ task }) => {
     story.init(task);
 
