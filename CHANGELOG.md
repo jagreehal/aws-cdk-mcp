@@ -1,5 +1,11 @@
 # aws-cdk-mcp
 
+## 0.4.0
+
+### Minor Changes
+
+- b9e4df0: `googleWorkspace` auth: a `*` key in `users` admits everyone in `hostedDomain`. A named entry wins over it.
+
 ## 0.3.0
 
 ### Minor Changes
