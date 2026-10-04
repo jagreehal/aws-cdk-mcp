@@ -56,7 +56,7 @@
     "@types/node": "26.6.3",
     "autotel": "7.9.0",
     "autotel-aws": "1.2.1",
-    "autotel-mcp-instrumentation": "59.0.0",
+    "autotel-mcp-instrumentation": "59.0.1",
     "aws-cdk": "2.1143.0",
     "aws-cdk-lib": "2.271.0",
     "cdk-nag": "3.0.2",

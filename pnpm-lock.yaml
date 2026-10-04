@@ -34,8 +34,8 @@ importers:
         specifier: 1.2.1
         version: 1.2.1(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/otlp-transformer@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(yaml@2.9.1)
       autotel-mcp-instrumentation:
-        specifier: 59.0.0
-        version: 59.0.0(@modelcontextprotocol/server@2.1.0)(autotel@7.9.0(@opentelemetry/exporter-logs-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(yaml@2.9.1))
+        specifier: 59.0.1
+        version: 59.0.1(@modelcontextprotocol/server@2.1.0)(autotel@7.9.0(@opentelemetry/exporter-logs-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(yaml@2.9.1))
       aws-cdk:
         specifier: 2.1143.0
         version: 2.1143.0
@@ -1246,8 +1246,8 @@ packages:
       '@smithy/signature-v4':
         optional: true
 
-  autotel-mcp-instrumentation@59.0.0:
-    resolution: {integrity: sha512-Mg7OidlXDO0nLUU7CwcY4zjSDeFITZ2yRN3EeGvYTJmce6UhMBHp1/2cN0g8zeehQLZGiQq7GUVJIhRnxM7z8g==}
+  autotel-mcp-instrumentation@59.0.1:
+    resolution: {integrity: sha512-952ME9IJlEGFAy6HZgkVsixcKLweI5oXcKGk8glDzqGWBjnJ3SENdE1AGPlPquH4VGb1YB/2BpZoLmlVqSOTVQ==}
     peerDependencies:
       '@modelcontextprotocol/client': ^2.0.0
       '@modelcontextprotocol/sdk': ^1.30.0
@@ -2898,7 +2898,7 @@ snapshots:
       - supports-color
       - yaml
 
-  autotel-mcp-instrumentation@59.0.0(@modelcontextprotocol/server@2.1.0)(autotel@7.9.0(@opentelemetry/exporter-logs-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(yaml@2.9.1)):
+  autotel-mcp-instrumentation@59.0.1(@modelcontextprotocol/server@2.1.0)(autotel@7.9.0(@opentelemetry/exporter-logs-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(yaml@2.9.1)):
     dependencies:
       '@opentelemetry/api': 1.9.1
       autotel: 7.9.0(@opentelemetry/exporter-logs-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-logs-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-metrics-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-grpc@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(yaml@2.9.1)
