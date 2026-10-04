@@ -62,7 +62,7 @@
     "cdk-nag": "3.0.2",
     "constructs": "10.8.1",
     "esbuild": "0.28.2",
-    "executable-stories-vitest": "8.9.8",
+    "executable-stories-vitest": "8.10.0",
     "hono": "4.13.9",
     "oxlint": "1.85.0",
     "prettier": "3.9.9",

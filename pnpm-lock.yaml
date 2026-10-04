@@ -52,8 +52,8 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       executable-stories-vitest:
-        specifier: 8.9.8
-        version: 8.9.8(vitest@5.0.2(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: 8.10.0
+        version: 8.10.0(vitest@5.0.2(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       hono:
         specifier: 4.13.9
         version: 4.13.9
@@ -1421,16 +1421,16 @@ packages:
   estree-walker@3.0.3:
     resolution: {integrity: sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g==}
 
-  executable-stories-core@0.27.0:
-    resolution: {integrity: sha512-nBp06e0ggCftuDg3Y/x/L9l3sttVvTXrpODbjknoqe3quW6PPLbDKXcnY3mmM9Ed6ClPtKJpJ8P4clOsFsYVdQ==}
+  executable-stories-core@0.28.0:
+    resolution: {integrity: sha512-B+dzIBxTV8Cn9NXko9icP1px0n1wKTIoqiv/R3QtcuW8hMbvUCXbVjSwhYn7/ILMbLivRqbkj9QoRf92OUe1lg==}
 
-  executable-stories-formatters@1.21.2:
-    resolution: {integrity: sha512-Jmj1nYUaGOhhswvAU+j2vaojH5guXH1H7udgTSIBgLo0UY/80Y/ym9fSsZZFFCRqOdyriTScCKjAaIAris90wQ==}
+  executable-stories-formatters@1.22.0:
+    resolution: {integrity: sha512-k/jpq39eipSueGM4oXeN6LODUGhjf6K8IOZ8R0tArY9xgh4HDK60G68V8rIgaSNuFyBnmN/L6xQEY+vZC4K8NQ==}
     engines: {node: '>=22'}
     hasBin: true
 
-  executable-stories-react@0.19.0:
-    resolution: {integrity: sha512-7+4yBNtUi6jTS45/OzNjCksAMNXHmkuWfe5+tgO2f92b0beyPP7hamTFPmv4uBb+7tHpv7ir6HRfPk9LK4zjWg==}
+  executable-stories-react@0.20.0:
+    resolution: {integrity: sha512-t8o0777SMM/HF5TOtr2O8LKdfyPSw7uoPcn6WjAPJwkEVyS2jT7l80R+vFh/kVquZaw8vxwMSEFGOlCjWt8FuQ==}
     peerDependencies:
       mermaid: '>=10'
       react: '>=19.2.7'
@@ -1439,8 +1439,8 @@ packages:
       mermaid:
         optional: true
 
-  executable-stories-vitest@8.9.8:
-    resolution: {integrity: sha512-HmadpPq3wnuggkYmRmu0HzQpdI7AmB1nWAUzf2kERuEUkq/0QsjhdAlVVDpRbvjfFJKW4oI/wxwI97ulIPCBjw==}
+  executable-stories-vitest@8.10.0:
+    resolution: {integrity: sha512-cCZdh2e5lXSue8FbIWxtZiPIwwMvjh8OVZJIp5Zq1TPovqHCjZQ6BCIAclFdUC9dnr+Fg6UO4YYaxVOFnKYuRA==}
     peerDependencies:
       vitest: '>=4.1.5'
 
@@ -3039,15 +3039,15 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
 
-  executable-stories-core@0.27.0: {}
+  executable-stories-core@0.28.0: {}
 
-  executable-stories-formatters@1.21.2:
+  executable-stories-formatters@1.22.0:
     dependencies:
       '@cucumber/html-formatter': 24.1.1(@cucumber/messages@34.2.1)
       '@cucumber/messages': 34.2.1
       ajv: 8.20.0
-      executable-stories-core: 0.27.0
-      executable-stories-react: 0.19.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      executable-stories-core: 0.28.0
+      executable-stories-react: 0.20.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       github-slugger: 2.0.0
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -3063,13 +3063,13 @@ snapshots:
       - svelte
       - vue
 
-  executable-stories-react@0.19.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+  executable-stories-react@0.20.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
       '@base-ui/react': 1.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       class-variance-authority: 0.7.1
       clsx: 2.1.1
       cmdk: 1.1.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      executable-stories-core: 0.27.0
+      executable-stories-core: 0.28.0
       lucide-react: 1.48.0(react@19.3.0)
       marked: 18.0.14
       react: 19.3.0
@@ -3087,10 +3087,10 @@ snapshots:
       - svelte
       - vue
 
-  executable-stories-vitest@8.9.8(vitest@5.0.2(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))):
+  executable-stories-vitest@8.10.0(vitest@5.0.2(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))):
     dependencies:
-      executable-stories-core: 0.27.0
-      executable-stories-formatters: 1.21.2
+      executable-stories-core: 0.28.0
+      executable-stories-formatters: 1.22.0
       fast-glob: 3.3.3
       picomatch: 4.0.7
       vitest: 5.0.2(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
