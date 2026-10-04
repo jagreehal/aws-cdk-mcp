@@ -52,7 +52,7 @@
     "@changesets/cli": "3.0.3",
     "@modelcontextprotocol/server": "2.1.0",
     "@oxlint/plugins": "1.85.0",
-    "@types/aws-lambda": "8.10.163",
+    "@types/aws-lambda": "8.10.164",
     "@types/node": "26.6.3",
     "autotel": "7.9.0",
     "autotel-aws": "1.2.1",
